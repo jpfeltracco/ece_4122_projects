@@ -65,26 +65,34 @@ Complex Complex::Conj() const
 
 void Complex::Print() const
 {
-  if (imag == 0)
+  double r = real;
+  double i = imag;
+  if (fabs(i) < 1e-10) i = 0;
+  if (fabs(r) < 1e-10) r = 0;
+
+  if (i == 0)
     { // just real part with no parens
       cout << real;
     }
   else
     {
-      cout << '(' << real << "," << imag << ')';
+      cout << '(' << r << "," << i << ')';
     }
 }
 
 // Global function to output a Complex value
 std::ostream& operator << (std::ostream &os, const Complex& c)
-{
-  if (c.imag == 0)
+{ Complex c1(c);
+
+  if (fabs(c1.imag) < 1e-10) c1.imag = 0;
+  if (fabs(c1.real) < 1e-10) c1.real = 0;
+  if (c1.imag == 0)
     { // just real part with no parens
-      os << c.real;
+      os << c1.real;
     }
   else
     {
-      os << '(' << c.real << "," << c.imag << ')';
+      os << '(' << c1.real << "," << c1.imag << ')';
     }
   return os;
 }
