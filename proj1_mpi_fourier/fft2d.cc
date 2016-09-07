@@ -150,7 +150,7 @@ void Transform2D(const char* inputFN)
 
     // need for rank 0 to gather all FT'd columns and transpose them
 
-    Complex* transformed_image = nullptr;
+    Complex* transformed_image = NULL;
 
     if (my_rank == 0) {
         // only allocate memory for rank 0, recv buff is discared
