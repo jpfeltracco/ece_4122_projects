@@ -120,13 +120,7 @@ void Transform2D(const char* inputFN)
                    MPI_CXX_DOUBLE_COMPLEX,              // receive type
                    rank,                                // root (rank)
                    MPI_COMM_WORLD);                     // MPI Comm
-    }
-
-    if (my_rank == 0) {
-        //cout << "BEFORE" << endl;
-        //Print(data_from_cpus, num_ranks, chunk_len);
-    }
-
+    } // At this point, data is in the format below
     // num_ranks = 4; image_width = 8, image_height = 8, row_p_rank = 2, col_p_rank = 2
     // |CPU0 Data          |CPU1 Data          |CPU2 Data          |CPU4 Data
     // |col0[0:1] col1[0:1]|col0[2:3] col1[2:3]|col0[4:5] col1[4:5]|col0[6:7] col1[6:7]
@@ -134,16 +128,6 @@ void Transform2D(const char* inputFN)
     // go back to a normal column-wise order (FT only works if data contiguous)
     // col0[0:7] col1[0:7]
     Complex* col_values = new Complex[col_sect_len];
-    //for (int col = 0; col < col_p_rank; ++col) {
-        ////int col_pos = col / col_p_rank;
-        //int col_pos = col * row_p_rank;
-        //for (int row = 0; row < image_height; ++row) {
-            //int chunk_pos = row / num_ranks;
-            //col_values[col * image_height + row] = col * image_height + row;
-            //data_from_cpus[col_pos + chunk_pos * chunk_len + row - chunk_len]
-                //= col_pos + chunk_pos * chunk_len + row;
-        //}
-    //}
 
     for (int rank = 0; rank < num_ranks; ++rank) {
         for (int local_col = 0; local_col < col_p_rank; ++local_col) {
@@ -155,13 +139,6 @@ void Transform2D(const char* inputFN)
         }
     }
 
-    //if (my_rank == 0) {
-        //cout << "DATA" << endl;
-        //Print(data_from_cpus, num_ranks, chunk_len);
-        //cout << "AFTER" << endl;
-        //Print(col_values, num_ranks, chunk_len);
-    //}
-
     Complex* col_results = new Complex[col_sect_len];
     for (int local_row = 0; local_row < row_p_rank; ++local_row) {
         // Offset from first row in image_data
@@ -169,13 +146,47 @@ void Transform2D(const char* inputFN)
         Transform1D(col_values + offset,
                     image_height,
                     col_results + offset);
-    }
+    } // At this point, col_results contains the FT'd columns
+
+    // need for rank 0 to gather all FT'd columns and transpose them
+
+    Complex* transformed_image = nullptr;
 
     if (my_rank == 0) {
-        Print(col_results, col_p_rank, image_height);
+        // only allocate memory for rank 0, recv buff is discared
+        // in the other ranks
+        transformed_image = new Complex[image_width * image_height];
     }
 
-    //cout << "RANK: " << my_rank << endl;
+    // The recv args are *only* used when my_rank == 0
+    MPI_Gather(col_results,             // send buff
+               col_sect_len,            // send count
+               MPI_CXX_DOUBLE_COMPLEX,  // send type
+               transformed_image,       // recv buff
+               col_sect_len,            // recv count
+               MPI_CXX_DOUBLE_COMPLEX,  // recv type
+               0,                       // rank
+               MPI_COMM_WORLD);         // MPI comm
+
+    if (my_rank == 0) {
+        ofstream outfile;
+        outfile.open("MyAfter2D.txt");
+        outfile << image_width << " " << image_height << endl;
+        // we have a column-wise array of the data, but we want
+        // to output the data row-wise
+        for (int row = 0; row < image_height; ++row) {
+            for (int col = 0; col < image_width; ++col) {
+                outfile << transformed_image[col * image_height + row]
+                        << " ";
+            }
+            outfile << endl;
+        }
+        outfile.close();
+    }
+
+
+
+
     //// Step (6)
     //if (rank == 0) {
         //for (int i = 0; i < 10; ++i) {
