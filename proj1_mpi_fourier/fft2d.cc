@@ -55,74 +55,127 @@ void Transform2D(const char* inputFN)
     // Step (1) in the comments is the line above.
     // Your code here, steps 2-9
     // Step (2)
-    int num_cpus = 0;
-    MPI_Comm_size(MPI_COMM_WORLD, &num_cpus);
-    int rank = 0;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    int num_rows_per_cpu = image_height / num_cpus;
-    int my_start_row = num_rows_per_cpu * rank;
+    // Number of CPUs in the whole MPI system
+    int num_ranks;
+    // This CPU's rank
+    int my_rank;
 
-    // Step (3)
-    Complex* temp_results = new Complex[image_width *  num_rows_per_cpu];
+    MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 
-    // Step (4)/(5)
+    // Number of rows to process per cpu
+    int row_p_rank = image_height / num_ranks;
+    // Number of cols to process per cpu
+    int col_p_rank = image_width / num_ranks;
+
+    // Length of array to hold row-wise FT result for one rank
+    int row_sect_len = image_width * row_p_rank;
+    // Length of array to hold col-wise FT result for one rank
+    int col_sect_len = image_height * col_p_rank;
+    // Index of the row to start at when doing row-wise FT
+    int my_start_row_ind = row_p_rank * my_rank * image_width;
+    // Index of the col to start at when doing column-wise FT
+    int my_start_col_ind = col_p_rank * my_rank * image_height;
+
+    // Complex* temp_results = new Complex[image_width * row_p_rank];
+    // Results of the fourier transform on our section of rows
+    Complex* row_results = new Complex[row_sect_len];
+
     // Index that our row start at in image_data
-    int start_row_offset = my_start_row * image_width;
-    for (int local_row = 0; local_row < num_rows_per_cpu; ++local_row) {
+    //int start_row_offset = my_start_row * image_width;
+    for (int local_row = 0; local_row < row_p_rank; ++local_row) {
         // Offset from first row in image_data
         int offset = local_row * image_width;
-        Transform1D(image_data + start_row_offset + offset,
+        // Transform one row at a time, store in row_results
+        Transform1D(image_data + my_start_row_ind + offset,
                     image_width,
-                    temp_results + offset);
-    }
+                    row_results + offset);
+    } // At this point, row_results is this rank's section of the row FT
 
-    // Ran transform1D on each row, dumping output in image_results
-
-    int num_cols_per_cpu = num_rows_per_cpu;
-
-    //cout << "PRINTING ROW ORDER" << endl;
-    //Print(image_result, num_rows_per_cpu, image_width);
-
-    // We will now transpose the matrix for use in the gather function call
-    Complex* temp_t = new Complex[image_width *  num_rows_per_cpu];
-    for (int row = 0; row < num_rows_per_cpu; ++row) {
+    // Want contiguous array access to elements column-wise because MPIs
+    // gather brings sections from multiple ranks into a contiguous array
+    // row_results_t has the same length as row_results, just column-wise ordering
+    Complex* row_results_t = new Complex[row_sect_len];
+    for (int row = 0; row < row_p_rank; ++row) {
         for (int col = 0; col < image_width; ++col) {
             int orig_pos = row * image_width + col;
-            int new_pos = col * num_rows_per_cpu + row;
-            temp_t[new_pos] = temp_results[orig_pos];
+            int new_pos = col * row_p_rank + row;
+            row_results_t[new_pos] = row_results[orig_pos];
         }
     }
-    //cout << "PRINTING COL ORDER" << endl;
-    //Print(image_t, image_width, num_rows_per_cpu);
-
-    Complex* col_result = new Complex[image_height * num_rows_per_cpu];
-    for (int col = 0; col < num_rows_per_cpu; ++col) {
-        // Each gather fills out a column 
-        MPI_Gather(image_t + col * num_cols_per_cpu, // send buff
-                   num_rows_per_cpu,                      // send count
-                   MPI_CXX_DOUBLE_COMPLEX,                // send type
-                   col_result + col * image_height,       // recv buff
-                   num_rows_per_cpu,                      // receive count
-                   MPI_CXX_DOUBLE_COMPLEX,                // receive type
-                   col / num_cols_per_cpu,                // root (rank)
-                   MPI_COMM_WORLD);                       // MPI Comm
+    
+    // Chunk refers to each block of memory that needs to be sent
+    // to the other CPUs
+    int chunk_len = row_p_rank * col_p_rank;
+    // Contains columns that need to be FT'd, in column-wise order
+    // This means data being sent to each CPU is in contiguous memory
+    Complex* data_from_cpus = new Complex[col_sect_len];
+    for (int rank = 0; rank < num_ranks; ++rank) {
+        MPI_Gather(row_results_t + rank * chunk_len,    // send buff
+                   chunk_len,                           // send count
+                   MPI_CXX_DOUBLE_COMPLEX,              // send type
+                   data_from_cpus,                      // recv buff
+                   chunk_len,                           // receive count
+                   MPI_CXX_DOUBLE_COMPLEX,              // receive type
+                   rank,                                // root (rank)
+                   MPI_COMM_WORLD);                     // MPI Comm
     }
 
-    
-    for (int local_row = 0; local_row < num_rows_per_cpu; ++local_row) {
+    if (my_rank == 0) {
+        //cout << "BEFORE" << endl;
+        //Print(data_from_cpus, num_ranks, chunk_len);
+    }
+
+    // num_ranks = 4; image_width = 8, image_height = 8, row_p_rank = 2, col_p_rank = 2
+    // |CPU0 Data          |CPU1 Data          |CPU2 Data          |CPU4 Data
+    // |col0[0:1] col1[0:1]|col0[2:3] col1[2:3]|col0[4:5] col1[4:5]|col0[6:7] col1[6:7]
+
+    // go back to a normal column-wise order (FT only works if data contiguous)
+    // col0[0:7] col1[0:7]
+    Complex* col_values = new Complex[col_sect_len];
+    //for (int col = 0; col < col_p_rank; ++col) {
+        ////int col_pos = col / col_p_rank;
+        //int col_pos = col * row_p_rank;
+        //for (int row = 0; row < image_height; ++row) {
+            //int chunk_pos = row / num_ranks;
+            //col_values[col * image_height + row] = col * image_height + row;
+            //data_from_cpus[col_pos + chunk_pos * chunk_len + row - chunk_len]
+                //= col_pos + chunk_pos * chunk_len + row;
+        //}
+    //}
+
+    for (int rank = 0; rank < num_ranks; ++rank) {
+        for (int local_col = 0; local_col < col_p_rank; ++local_col) {
+            // Local row refers to row within a data chunk sent by another CPU
+            for (int local_row = 0; local_row < row_p_rank; ++local_row) {
+                col_values[rank * row_p_rank + local_col * image_height + local_row]
+                    = data_from_cpus[rank * chunk_len + local_col * row_p_rank + local_row];
+            }
+        }
+    }
+
+    //if (my_rank == 0) {
+        //cout << "DATA" << endl;
+        //Print(data_from_cpus, num_ranks, chunk_len);
+        //cout << "AFTER" << endl;
+        //Print(col_values, num_ranks, chunk_len);
+    //}
+
+    Complex* col_results = new Complex[col_sect_len];
+    for (int local_row = 0; local_row < row_p_rank; ++local_row) {
         // Offset from first row in image_data
         int offset = local_row * image_width;
-        Transform1D(col_result + offset,
-                    image_width,
-                    image_result + offset);
+        Transform1D(col_values + offset,
+                    image_height,
+                    col_results + offset);
     }
 
-    if (rank == 0) {
-        Print(image_result, num_rows_per_cpu, image_width);
+    if (my_rank == 0) {
+        Print(col_results, col_p_rank, image_height);
     }
 
-    //cout << "RANK: " << rank << endl;
+    //cout << "RANK: " << my_rank << endl;
     //// Step (6)
     //if (rank == 0) {
         //for (int i = 0; i < 10; ++i) {
@@ -152,7 +205,7 @@ void Transform2D(const char* inputFN)
     //delete[] image_result;
 
     // Another step or something
-    //int my_start_col = num_cols_per_cpu * rank;
+    //int my_start_col = num_cols_per_cpu * my_rank;
 
     //// Place to store columns we need to process
     //Complex* image_recv_cols = new Complex[image_height *  num_cols_per_cpu];
