@@ -1,5 +1,5 @@
-#!/bin/tcsh
+#!/bin/bash
 # The below tells MPI to run your jobs on 16 processors
-/usr/lib64/openmpi/bin/mpirun -np 16 --hostfile localHost.txt  ./fft2d
+mpirun -np 16 --hostfile localHost.txt  ./fft2d
 
 
