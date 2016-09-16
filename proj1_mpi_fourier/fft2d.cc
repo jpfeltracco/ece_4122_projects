@@ -65,6 +65,8 @@ void Transform2D(const char* inputFN)
     // This CPU's rank
     int my_rank;
 
+    int rc;
+
     MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 
@@ -108,7 +110,7 @@ void Transform2D(const char* inputFN)
     // This means data being sent to each CPU is in contiguous memory
     Complex* col_sect_arr = new Complex[col_sect_len];
     for (int rank = 0; rank < num_ranks; ++rank) {
-        MPI_Gather(row_results_col + rank * chunk_len,  // send buff
+        rc = MPI_Gather(row_results_col + rank * chunk_len,  // send buff
                    chunk_len,                           // send count
                    MPI_CXX_DOUBLE_COMPLEX,              // send type
                    col_sect_arr,                        // recv buff
@@ -116,6 +118,10 @@ void Transform2D(const char* inputFN)
                    MPI_CXX_DOUBLE_COMPLEX,              // receive type
                    rank,                                // root (rank)
                    MPI_COMM_WORLD);                     // MPI Comm
+
+        if (rc != MPI_SUCCESS) {
+            cout << "Failed to gather ft'd columns." << endl;
+        }
     }
     delete[] row_results_col;
     
@@ -160,7 +166,7 @@ void Transform2D(const char* inputFN)
     }
 
     // The recv args are *only* used when my_rank == 0
-    MPI_Gather(col_sect_arr,            // send buff
+    rc = MPI_Gather(col_sect_arr,            // send buff
                col_sect_len,            // send count
                MPI_CXX_DOUBLE_COMPLEX,  // send type
                transformed_image,       // recv buff
@@ -168,6 +174,10 @@ void Transform2D(const char* inputFN)
                MPI_CXX_DOUBLE_COMPLEX,  // recv type
                0,                       // rank
                MPI_COMM_WORLD);         // MPI comm
+
+    if (rc != MPI_SUCCESS) {
+        cout << "Failed to gather into rank 0." << endl;
+    }
 
     delete[] col_sect_arr;
 
@@ -195,9 +205,15 @@ int main(int argc, char** argv)
     string fn("Tower.txt"); // default file name
     if (argc > 1) fn = string(argv[1]);  // if name specified on cmd line
     // MPI initialization here
-    MPI_Init(&argc, &argv);
+    int rc = MPI_Init(&argc, &argv);
+    if (rc != MPI_SUCCESS) {
+        cout << "Failed to initialize MPI." << endl;
+    }
     Transform2D(fn.c_str()); // Perform the transform.
     // Finalize MPI here
-    MPI_Finalize();
+    rc = MPI_Finalize();
+    if (rc != MPI_SUCCESS) {
+        cout << "Failed to finalize MPI." << endl;
+    }
 }  
 
