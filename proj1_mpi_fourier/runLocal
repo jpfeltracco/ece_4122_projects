@@ -1,0 +1,5 @@
+#!/bin/bash
+# The below tells MPI to run your jobs on 16 processors
+mpirun -np 16 --hostfile localHost.txt  ./fft2d
+
+
