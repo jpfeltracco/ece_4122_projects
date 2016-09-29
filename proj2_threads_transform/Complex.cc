@@ -46,6 +46,23 @@ Complex Complex::operator*(const Complex& b) const
                  real*b.imag + imag*b.real);
 }
 
+Complex Complex::operator/(const Complex& b) const
+{
+  Complex tmp = (*this) * b.Conj();
+  Complex magSquared = b.Mag() * b.Mag();
+  if (magSquared.Mag().real == 0.0)
+    {
+      return Complex(); // jus zero in this cae
+    }
+  return Complex(tmp.real/magSquared.real, tmp.imag/magSquared.real);
+}
+
+
+// Complex Complex::operator/(const Complex& b) const
+// {
+//   return Complex(real/b.real, imag/ b.real);
+//   // THis needs some work
+// }
 
 // Member functions
 Complex Complex::Mag() const
