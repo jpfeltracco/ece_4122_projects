@@ -229,7 +229,7 @@ void Transform2D(const char* inputFN)
     pthread_mutex_unlock(&activeMutex);
 
     // Write the transformed data
-    image.SaveImageData("myafter2d.txt", image_data, width, height);
+    image.SaveImageData("MyAfter2D.txt", image_data, width, height);
 }
 
 int main(int argc, char** argv)
