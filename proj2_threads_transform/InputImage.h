@@ -21,6 +21,7 @@ public:
   // The value saved is the magnitude of each element of d. Theh size of
   // d should be w * h.
   void      SaveImageData(const char* newFileName, Complex* d, int w, int h);
+  void      SaveImageDataReal(const char* newFileName, Complex* d, int w, int h);
 private:
   int w;         // width of image
   int h;         // height of image

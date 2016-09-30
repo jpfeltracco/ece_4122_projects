@@ -61,7 +61,27 @@ void InputImage::SaveImageData(const char* newFileName, Complex* d,
     { // for each row
       for (int c = 0; c < w; ++c)
         { // for each column
-          ofs << d[r * w + c].Mag() << " ";
+          ofs << d[r * w + c] << " ";
+        }
+      ofs << endl;
+    }
+}
+
+void InputImage::SaveImageDataReal(const char* newFileName, Complex* d,
+                               int w, int h)
+{
+  ofstream ofs(newFileName);
+  if (!ofs)
+    {
+      cout << "Can't create output image " << newFileName << endl;
+      return;
+    }
+  ofs << w << " " << h << endl;
+  for (int r = 0; r < h; ++r)
+    { // for each row
+      for (int c = 0; c < w; ++c)
+        { // for each column
+          ofs << d[r * w + c].real << " ";
         }
       ofs << endl;
     }
