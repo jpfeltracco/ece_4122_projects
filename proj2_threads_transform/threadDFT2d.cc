@@ -18,12 +18,23 @@ using namespace std;
 unsigned N; // Num points in the 1D transform
 Complex* image_data;
 
-Complex* horz_weights;
-Complex* vert_weights;
+Complex* row_weights;
+Complex* col_weights;
+
+pthread_barrier_t barrier;
+pthread_mutex_t activeMutex;
+pthread_mutex_t coutMutex;
+pthread_cond_t  allDoneCondition;
+
+int activeThreads = 0;
 
 int width;
 int height;
-const int num_threads = 16;
+
+int rows_per_thread;
+int cols_per_thread;
+
+const int NUM_THREADS = 16;
 
 // Function to reverse bits in an unsigned integer
 // This assumes there is a global variable N that is the
@@ -62,9 +73,10 @@ void ReverseBits(Complex* arr) {
     for (unsigned i = 0; i < N; ++i) {
         unsigned newpos = ReverseBits(i);
         if (i < newpos) {
-            Complex c = arr[newpos];
-            arr[newpos] = arr[i];
-            arr[i] = c;
+            swap(arr[newpos], arr[i]);
+            // Complex c = arr[newpos];
+            // arr[newpos] = arr[i];
+            // arr[i] = c;
         }
     }
 }
@@ -96,23 +108,77 @@ void Transform1D(Complex* h, Complex* w) // removed N argument
 
                 // calculate FFT(even) + W * FFT(odd)
                 Complex even_result = h[even_ind] + w[weight_ind] * h[odd_ind];
-                Complex odd_result = h[even_ind] + Complex(-1, 0) * w[weight_ind] * h[odd_ind];
+                h[odd_ind] = h[even_ind] + Complex(-1, 0) * w[weight_ind] * h[odd_ind];
 
                 h[even_ind] = even_result;
-                h[odd_ind] = odd_result;
             }
         }
     }
+}
 
+void transpose(Complex* mat, int w, int h) {
+    for (int start = 0; start <= w * h; ++start) {
+        int next = start;
+        int i = 0;
+        do {
+            ++i;
+            next = (next % h) * w + next / h;
+        } while (next > start);
+
+        if (next >= start && i != 1) {
+            Complex tmp = mat[start];
+            next = start;
+            do {
+                i = (next % h) * w + next / h;
+                mat[next] = (i == start) ? tmp : mat[i];
+                next = i;
+            } while (next > start);
+        }
+    }
 }
 
 void* Transform2DThread(void* v)
 {
     // This is the thread starting point.    "v" is the thread number
+    long thread_num = (long) v;
     // Calculate 1d DFT for assigned rows
+    N = width;
+    // pthread_mutex_lock(&coutMutex);
+    // cout << "width" << width << endl;
+    // cout << "thread_num" << thread_num << endl;
+    // cout << "starting at " << (thread_num) * width << endl;
+    // pthread_mutex_unlock(&coutMutex);
+    for (int row = 0; row < rows_per_thread; ++row) {
+        Transform1D(image_data + (thread_num * rows_per_thread + row) * width, row_weights);
+    }
+
     // wait for all to complete
+    pthread_barrier_wait(&barrier);
+
+    if (v == 0) {
+        transpose(image_data, width, height);
+    }
+
+    pthread_barrier_wait(&barrier);
+
+    N = height;
+    for (int col = 0; col < cols_per_thread; ++col) {
+        Transform1D(image_data + (thread_num * cols_per_thread + col) * height, col_weights);
+    }
+
+    pthread_barrier_wait(&barrier);
+
+    if (v == 0) {
+        transpose(image_data, height, width);
+    }
     // Calculate 1d DFT for assigned columns
     // Decrement active count and signal main if all complete
+    pthread_mutex_lock(&activeMutex);
+    activeThreads--;
+    if (activeThreads == 0) {
+        pthread_cond_signal(&allDoneCondition);
+    }
+    pthread_mutex_unlock(&activeMutex);
     return 0;
 }
 
@@ -133,20 +199,37 @@ void Transform2D(const char* inputFN)
     height = image.GetHeight();
 
 
-    horz_weights = new Complex[width / 2];
-    vert_weights = new Complex[height / 2];
-    fill_weights(horz_weights, width);
-    fill_weights(vert_weights, height);
+    rows_per_thread = height / NUM_THREADS;
+    cols_per_thread = width / NUM_THREADS;
 
-    // Create 16 threads
-    // Wait for all threads complete
-    // Write the transformed data
+    row_weights = new Complex[width / 2];
+    col_weights = new Complex[height / 2];
+    fill_weights(row_weights, width);
+    fill_weights(col_weights, height);
 
-    N = width;
-    for (int row = 0; row < height; ++row) {
-        Transform1D(image_data + row * width, horz_weights);
+
+    pthread_t threads[NUM_THREADS];
+
+    if (pthread_barrier_init(&barrier, NULL, NUM_THREADS)) {
+        cout << "Barrier couldn't be initialized" << endl;
     }
-    image.SaveImageData("myafter1d.txt", image_data, width, height);
+
+    pthread_mutex_init(&activeMutex, 0);
+    pthread_mutex_init(&coutMutex, 0);
+    pthread_cond_init(&allDoneCondition, 0);
+
+    pthread_mutex_lock(&activeMutex);
+    activeThreads = NUM_THREADS;
+    // Create 16 threads
+    for (long i = 0; i < NUM_THREADS; ++i) {
+        pthread_create(&threads[i], 0, Transform2DThread,  (void*) i);
+    }
+    // Wait for all threads complete
+    pthread_cond_wait(&allDoneCondition, &activeMutex);
+    pthread_mutex_unlock(&activeMutex);
+
+    // Write the transformed data
+    image.SaveImageData("myafter2d.txt", image_data, width, height);
 }
 
 int main(int argc, char** argv)
@@ -155,19 +238,4 @@ int main(int argc, char** argv)
     if (argc > 1) fn = string(argv[1]); // if name specified on cmd line
     // MPI initialization here
     Transform2D(fn.c_str()); // Perform the transform.
-
-    // Reverse bits test
-    // int len = 8;
-    // N = len;
-    // Complex* arr = new Complex[len];
-    // for (int i = 0; i < len; ++i) {
-    //     arr[i] = Complex(i, 0);
-    // }
-
-    // ReverseBits(arr);
-
-    // for (int i = 0; i < len; ++i) {
-    //     cout << arr[i] << endl;
-    // }
-
 }
