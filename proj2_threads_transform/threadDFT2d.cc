@@ -74,9 +74,6 @@ void ReverseBits(Complex* arr) {
         unsigned newpos = ReverseBits(i);
         if (i < newpos) {
             swap(arr[newpos], arr[i]);
-            // Complex c = arr[newpos];
-            // arr[newpos] = arr[i];
-            // arr[i] = c;
         }
     }
 }
@@ -88,18 +85,13 @@ void Transform1D(Complex* h, Complex* w) // removed N argument
     // "N" is the size of the array (assume even power of 2)
     ReverseBits(h);
 
-    // Should this reordering be done in place?
-
-    // cout << "reached transform 1d" << endl;
+    Complex neg1(-1, 0);
     // 2, 4, 8, ...
     for (unsigned chunk_size = 2; chunk_size <= N; chunk_size *= 2) {
-        // cout << "Chunk size: " << chunk_size << endl;
         // loop in chunks of chunk_size
         for (unsigned chunk = 0; chunk != N; chunk += chunk_size) {
-            // cout << "\tChunk: " << chunk << endl;
             // perform transform on chunk
             for (unsigned k = 0; k < chunk_size / 2; ++k) {
-                // cout << "\t\tk in chunk: " << k << endl;
                 // do actual processing
                 unsigned even_ind = k + chunk;
                 unsigned odd_ind = k + chunk + chunk_size / 2;
@@ -108,8 +100,8 @@ void Transform1D(Complex* h, Complex* w) // removed N argument
 
                 // calculate FFT(even) + W * FFT(odd)
                 Complex even_result = h[even_ind] + w[weight_ind] * h[odd_ind];
-                h[odd_ind] = h[even_ind] + Complex(-1, 0) * w[weight_ind] * h[odd_ind];
 
+                h[odd_ind] = h[even_ind] + neg1 * w[weight_ind] * h[odd_ind];
                 h[even_ind] = even_result;
             }
         }
@@ -117,6 +109,7 @@ void Transform1D(Complex* h, Complex* w) // removed N argument
 }
 
 void transpose(Complex* mat, int w, int h) {
+    // Complicated transpose algorithm that performs in place.
     for (int start = 0; start <= w * h; ++start) {
         int next = start;
         int i = 0;
@@ -143,11 +136,6 @@ void* Transform2DThread(void* v)
     long thread_num = (long) v;
     // Calculate 1d DFT for assigned rows
     N = width;
-    // pthread_mutex_lock(&coutMutex);
-    // cout << "width" << width << endl;
-    // cout << "thread_num" << thread_num << endl;
-    // cout << "starting at " << (thread_num) * width << endl;
-    // pthread_mutex_unlock(&coutMutex);
     for (int row = 0; row < rows_per_thread; ++row) {
         Transform1D(image_data + (thread_num * rows_per_thread + row) * width, row_weights);
     }
@@ -156,21 +144,27 @@ void* Transform2DThread(void* v)
     pthread_barrier_wait(&barrier);
 
     if (v == 0) {
+        // let only thread 0 transpose the array
         transpose(image_data, width, height);
     }
 
+    // wait for thread 0 to finish tranposing
     pthread_barrier_wait(&barrier);
 
+    // Calculate 1d DFT for assigned cols
     N = height;
     for (int col = 0; col < cols_per_thread; ++col) {
         Transform1D(image_data + (thread_num * cols_per_thread + col) * height, col_weights);
     }
 
+    // Wait for all threads to finish.
     pthread_barrier_wait(&barrier);
 
     if (v == 0) {
+        // let only thread 0 tranpose the array again
         transpose(image_data, height, width);
     }
+
     // Calculate 1d DFT for assigned columns
     // Decrement active count and signal main if all complete
     pthread_mutex_lock(&activeMutex);
@@ -230,6 +224,9 @@ void Transform2D(const char* inputFN)
 
     // Write the transformed data
     image.SaveImageData("MyAfter2D.txt", image_data, width, height);
+
+    delete[] row_weights;
+    delete[] col_weights;
 }
 
 int main(int argc, char** argv)
