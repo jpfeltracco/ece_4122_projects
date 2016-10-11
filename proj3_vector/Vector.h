@@ -15,7 +15,7 @@
 #include <unistd.h>
 
 // Comment out below if not a grad student
-#define GRAD_STUDENT
+// #define GRAD_STUDENT
 
 // Forward declaration of VectorIterator (templated) class
 template <typename T> class VectorIterator;
