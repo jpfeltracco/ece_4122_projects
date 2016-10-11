@@ -28,12 +28,6 @@ class Vector
   Vector();                     // Default constructor
   Vector(const Vector&);        // Copy constructor
   Vector& operator=(const Vector& rhs);  // Assignment operator
-#ifdef GRAD_STUDENT
-  // Grad students only, implement next three
-  Vector(size_t);               // Construct with initial "reserved" size
-  Vector(size_t n, const T& t); // Construct with "n" copies of t.
-  void Reserve(size_t n);       // Ensure enough memory for "n" elements
-#endif
   // Destructor
   ~Vector();                    // Destructor
   // Add and remove elements
@@ -46,7 +40,7 @@ class Vector
   // Element access
   T&   Front() const;           // Return reference to first element
   T&   Back() const;            // Return reference to last element
-  const T& operator[](size_t) const;// Return reference to specified element
+  T& operator[](size_t) const;// Return reference to specified element
   T&   operator[](size_t);     // Return reference to specified (nonconst)
   // Metrics functions
   size_t Size() const;          // Return number of elements
@@ -57,11 +51,6 @@ class Vector
   // Iterator initializers
   VectorIterator<T> Begin() const;       // Get an iterator to first element
   VectorIterator<T> End() const;         // Get an iterator to one beyond end
-#ifdef GRAD_STUDENT
-  // Grad students only, implement the next two
-  void Erase(const VectorIterator<T>&);      // Remove specified element
-  void Insert(const T&, const VectorIterator<T>&); // Insert element BEFORE itr
-#endif
 private:
   // Member variables here
   T*     elements;  // Points to the actual elements

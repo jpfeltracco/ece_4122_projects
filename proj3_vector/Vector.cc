@@ -27,19 +27,6 @@ Vector<T>& Vector<T>::operator=(const Vector& rhs)
 {
 }
 
-#ifdef GRAD_STUDENT
-// Other constructors
-template <typename T>
-Vector<T>::Vector(size_t nReserved)
-{ // Initialize with reserved memory
-}
-
-template <typename T>
-Vector<T>::Vector(size_t n, const T& t)
-{ // Initialize with "n" copies of "t"
-}
-#endif
-
 // Destructor
 template <typename T>
 Vector<T>::~Vector()
@@ -87,11 +74,13 @@ T& Vector<T>::operator[](size_t i) const
 template <typename T>
 size_t Vector<T>::Size() const
 {
+    return count;
 }
 
 template <typename T>
 bool Vector<T>::Empty() const
 {
+    return count == 0;
 }
 
 // Implement clear
@@ -111,19 +100,6 @@ template <typename T>
 VectorIterator<T> Vector<T>::End() const
 {
 }
-
-#ifdef GRAD_STUDENT
-// Erase and insert
-template <typename T>
-void Vector<T>::Erase(const VectorIterator<T>& it)
-{
-}
-
-template <typename T>
-void Vector<T>::Insert(const T& rhs, const VectorIterator<T>& it)
-{
-}
-#endif
 
 // Implement the iterators
 
