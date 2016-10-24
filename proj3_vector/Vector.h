@@ -1,8 +1,7 @@
 // ECE4893/8893 Assignment 3
 //  Georgia Tech, Fall 2011
 
-// Students should NOT hae to change this, excepting
-// commenting out the GRAD_STUDENT definition (for undergrads)
+// Students should NOT hae to change this, excepting // commenting out the GRAD_STUDENT definition (for undergrads)
 // This is the definition of the templated "Vector" class
 // that stores a variable number of elements of arbitrary
 // type T.
@@ -40,7 +39,7 @@ class Vector
   // Element access
   T&   Front() const;           // Return reference to first element
   T&   Back() const;            // Return reference to last element
-  T& operator[](size_t) const;// Return reference to specified element
+  const T& operator[](size_t) const;// Return reference to specified element
   T&   operator[](size_t);     // Return reference to specified (nonconst)
   // Metrics functions
   size_t Size() const;          // Return number of elements

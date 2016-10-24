@@ -83,6 +83,7 @@ void Vector<T>::Push_Front(const T& rhs)
 {
     if (count == reserved) {
         reserved = count + 1;
+        // reserved *= 2;
         T* new_arr = (T*) malloc(reserved * sizeof(T));
 
         for (unsigned i = 0; i < count; ++i) {
@@ -97,6 +98,11 @@ void Vector<T>::Push_Front(const T& rhs)
         }
 
         elements = new_arr;
+    } else {
+        for (unsigned i = count; i > 0; --i) {
+            new (&elements[i]) T(elements[i - 1]);
+            elements[i - 1].~T();
+        }
     }
 
     new (&elements[0]) T(rhs);
@@ -138,7 +144,7 @@ T& Vector<T>::Back() const
 }
 
 template <typename T>
-T& Vector<T>::operator[](size_t i) const
+const T& Vector<T>::operator[](size_t i) const
 {
     return elements[i];
 }
