@@ -18,8 +18,11 @@
 using namespace std;
 
 // Min and max complex plane values
-Complex minC(-2.0, -1.2);
-Complex maxC(1.0, 1.8);
+//Complex minC(-2.0, -1.2);
+//Complex maxC(1.0, 1.8);
+// TODO: ASK WHY THE PREVIOUS MIN MAX VALUES WERE CHOSEN
+Complex minC(-2, -1.5);
+Complex maxC(1, 1.5);
 int      maxIt = 2000;     // Max iterations for the set computations
 
 const int N(512);
@@ -27,7 +30,7 @@ const int N(512);
 //int pixels[N * N][3];
 uint8_t pixels[N][N][3];
 
-void display(void)
+void display()
 {
     //glWindowPos2f(10, 200);
     glLoadIdentity();
@@ -57,11 +60,16 @@ void init()
 void reshape(int w, int h)
 { // Your OpenGL window reshape code here
 
-    //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    cout << "Reshape called" << endl;
+    //display();
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     // Clear the matrix
-    //glMatrixMode(GL_MODELVIEW);
-    //glLoadIdentity();
-    //glOrtho(0.0, w, 0.0, h, -1.0, 1.0);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(-1.0, w, -1.0, h, -1.0, 1.0);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    glutPostRedisplay();
 }
 
 //void mouse(int button, int state, int x, int y)
@@ -82,13 +90,13 @@ void reshape(int w, int h)
 int main(int argc, char** argv)
 {
     // Initialize OpenGL, but only on the "master" thread or process.
-    // glutReshapeFunc(reshape);
 
     glutInit(&argc, argv); // Initialize GLUT
     glutCreateWindow("Mandelbrot"); // Create a window with the given title
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
     glutInitWindowSize(512, 512); // Set the window's initial width & height
     glutInitWindowPosition(0, 0); // Position the window's initial top-left corner
+    glutReshapeFunc(reshape);
 
     const double deltaWidth = (maxC - minC).real / N;
     const double deltaHeight = (maxC - minC).imag / N;
@@ -113,9 +121,15 @@ int main(int argc, char** argv)
             
             if (!iterationTrip) {
                 cout << numIterations << endl;
-                pixels[y][x][0] = numIterations % 255;
-                pixels[y][x][1] = numIterations + 20 % 255;
-                pixels[y][x][2] = numIterations + 200 % 255;
+                pixels[y][x][0] = (numIterations * 953)  % 255;
+                pixels[y][x][1] = (numIterations * 6269) % 255;
+                pixels[y][x][2] = (numIterations * 4999) % 255;
+
+                if (pixels[y][x][0] + pixels[y][x][1] + pixels[y][x][2] < 20) {
+                    pixels[y][x][0] = (pixels[y][x][0] + 50);
+                    pixels[y][x][1] = (pixels[y][x][1] + 132);
+                    pixels[y][x][2] = (pixels[y][x][2] + 200);
+                }
             } else {
                 pixels[y][x][0] = 0;
                 pixels[y][x][1] = 0;
@@ -123,8 +137,8 @@ int main(int argc, char** argv)
             }
         }
     }
-
     glutDisplayFunc(display); // Register display callback handler for window re-paint
+    glutIdleFunc(display);
     glutMainLoop();  // Enter the event-processing loop
 
     return 0;
