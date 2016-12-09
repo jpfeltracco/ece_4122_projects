@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <pthread.h>
+#include <vector>
 
 #include <GL/glut.h>
 #include <GL/glext.h>
@@ -18,127 +19,114 @@
 using namespace std;
 
 // Min and max complex plane values
-//Complex minC(-2.0, -1.2);
-//Complex maxC(1.0, 1.8);
-// TODO: ASK WHY THE PREVIOUS MIN MAX VALUES WERE CHOSEN
-Complex minC(-2, -1.5);
-Complex maxC(1, 1.5);
-int      maxIt = 2000;     // Max iterations for the set computations
+Complex minC(-2.0, -1.2);
+Complex maxC(1.0, 1.8);
 
-const int N(512);
+// These values are more centered
+//Complex minC(-2, -1.5);
+//Complex maxC(1, 1.5);
 
-//int pixels[N * N][3];
-uint8_t pixels[N][N][3];
+int winX = 512;
+int winY = 512;
+int maxIt = 2000;     // Max iterations for the set computations
+
+// Contains the computed mandelbrot set represented as the iteration numbers of each
+vector< vector<int> > v;
+
+float color_vec[3];
+
+int get_num_iterations(Complex c)
+{
+    Complex k(c);
+
+    unsigned numIterations = 0;
+    while (k.Mag().real < 2.0) {
+        k = k * k + c;
+        numIterations++;
+        if (numIterations > maxIt) {
+            return -1;
+        }
+    }
+
+    return numIterations;
+}
+
+void get_color_iterations(int num_iterations, float* color)
+{
+    color[0] = 0.0f; color[1] = 0.0f; color[2] = 0.0f;
+    if (num_iterations == -1) {
+        return;
+    }
+
+    // These essentially are random, but stay the same based on the
+    // iteration number. They also avoid the color black which is
+    // reserved for values in the mandelbrot set.
+    color[0] = (num_iterations * 11)  % 205 + 50;
+    color[1] = (num_iterations * 34) % 205 + 50;
+    color[2] = (num_iterations * 4999) % 205 + 50;
+
+    color[0] /= 255;
+    color[1] /= 255;
+    color[2] /= 255;
+}
 
 void display()
 {
-    //glWindowPos2f(10, 200);
-    glLoadIdentity();
-    glRasterPos2f(-1, -1);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // Set background color to black and opaque
     glClear(GL_COLOR_BUFFER_BIT);         // Clear the color buffer (background) // Your OpenGL display code here
-    // Draw a Red 1x1 Square centered at origin
-    /*
-    glBegin(GL_QUADS);              // Each set of 4 vertices form a quad
-        glColor3f(1.0f, 0.0f, 0.0f); // Red
-        glVertex2f(-0.5f, -0.5f);    // x, y
-        glVertex2f( 0.5f, -0.5f);
-        glVertex2f( 0.5f,  0.5f);
-        glVertex2f(-0.5f,  0.5f);
+    glBegin(GL_POINTS);
+    float pixel_step_x = (maxC.real - minC.real) / winX;
+    float pixel_step_y = (maxC.imag - minC.imag) / winY;
+
+    for (int y = 0; y < winY; ++y) {
+        for (int x = 0; x < winX; ++x) {
+            float real_val = x * pixel_step_x + minC.real;
+            float imag_val = y * pixel_step_y + minC.imag;
+
+            Complex c(real_val, imag_val);
+            int iters = get_num_iterations(c);
+
+            get_color_iterations(iters, color_vec);
+            // set color of the point
+            glColor3fv(color_vec);
+            glVertex3f(real_val, imag_val, 0.0f);
+        }
+    }
     glEnd();
-    */
 
-    glDrawPixels(N, N, GL_RGB, GL_UNSIGNED_BYTE, pixels);
-
-    glFlush();
-}
-
-void init()
-{ // Your OpenGL initialization code here
+    glutSwapBuffers();
 }
 
 void reshape(int w, int h)
 { // Your OpenGL window reshape code here
 
-    cout << "Reshape called" << endl;
-    //display();
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    // Clear the matrix
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(-1.0, w, -1.0, h, -1.0, 1.0);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
+    glClear(GL_COLOR_BUFFER_BIT); // Clear the color buffer (background) // Your OpenGL display code here
+
+    winX = w; winY = h;
+
+    glViewport(0, 0, w, h);
     glutPostRedisplay();
 }
-
-//void mouse(int button, int state, int x, int y)
-//{ // Your mouse click processing here
-// state == 0 means pressed, state != 0 means released
-// Note that the x and y coordinates passed in are in
-// PIXELS, with y = 0 at the top.
-//}
-
-//void motion(int x, int y)
-//{ // Your mouse motion here, x and y coordinates are as above
-//}
-
-//void keyboard(unsigned char c, int x, int y)
-//{ // Your keyboard processing here
-//}
 
 int main(int argc, char** argv)
 {
     // Initialize OpenGL, but only on the "master" thread or process.
-
     glutInit(&argc, argv); // Initialize GLUT
-    glutCreateWindow("Mandelbrot"); // Create a window with the given title
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
-    glutInitWindowSize(512, 512); // Set the window's initial width & height
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // Set background color to black and opaque
+
+    // Window initialization
+    glutInitWindowSize(winX, winY); // Set the window's initial width & height
     glutInitWindowPosition(0, 0); // Position the window's initial top-left corner
-    glutReshapeFunc(reshape);
+    glutCreateWindow("Mandelbrot"); // Create a window with the given title
 
-    const double deltaWidth = (maxC - minC).real / N;
-    const double deltaHeight = (maxC - minC).imag / N;
-    for (int y = 0; y < N; ++y) {
-        for (int x = 0; x < N; ++x) {
-            double real = deltaWidth * x + minC.real;
-            double imag = deltaHeight * y + minC.imag;
+    glViewport (0, 0, winX, winY);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(minC.real, maxC.real, minC.imag, maxC.imag, -1.0, 1.0);
 
-            Complex c(real, imag);
-            Complex k(c);
-
-            unsigned numIterations = 0;
-            bool iterationTrip = false;
-            while (k.Mag().real < 2.0) {
-                k = k * k + c;
-                numIterations++;
-                if (numIterations > maxIt) {
-                    iterationTrip = true;
-                    break;
-                }
-            }
-            
-            if (!iterationTrip) {
-                cout << numIterations << endl;
-                pixels[y][x][0] = (numIterations * 953)  % 255;
-                pixels[y][x][1] = (numIterations * 6269) % 255;
-                pixels[y][x][2] = (numIterations * 4999) % 255;
-
-                if (pixels[y][x][0] + pixels[y][x][1] + pixels[y][x][2] < 20) {
-                    pixels[y][x][0] = (pixels[y][x][0] + 50);
-                    pixels[y][x][1] = (pixels[y][x][1] + 132);
-                    pixels[y][x][2] = (pixels[y][x][2] + 200);
-                }
-            } else {
-                pixels[y][x][0] = 0;
-                pixels[y][x][1] = 0;
-                pixels[y][x][2] = 0;
-            }
-        }
-    }
+    glutReshapeFunc(reshape); // Window resize callback
     glutDisplayFunc(display); // Register display callback handler for window re-paint
-    glutIdleFunc(display);
+
     glutMainLoop();  // Enter the event-processing loop
 
     return 0;
