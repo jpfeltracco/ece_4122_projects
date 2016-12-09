@@ -26,12 +26,18 @@ Complex maxC(1.0, 1.8);
 //Complex minC(-2, -1.5);
 //Complex maxC(1, 1.5);
 
+pthread_barrier_t barrier;
+pthread_mutex_t activeMutex;
+pthread_mutex_t coutMutex;
+pthread_cond_t  allDoneCondition;
+
 int winX = 512;
 int winY = 512;
 int maxIt = 2000;     // Max iterations for the set computations
 
-// Contains the computed mandelbrot set represented as the iteration numbers of each
-vector< vector<int> > v;
+int activeThreads = 0;
+// Contains the computed mandelbrot set represented by vectors of colors
+vector< vector< vector<float> > > set;
 
 float color_vec[3];
 
@@ -51,9 +57,8 @@ int get_num_iterations(Complex c)
     return numIterations;
 }
 
-void get_color_iterations(int num_iterations, float* color)
+void get_color_iterations(int num_iterations, vector<float>& color)
 {
-    color[0] = 0.0f; color[1] = 0.0f; color[2] = 0.0f;
     if (num_iterations == -1) {
         return;
     }
@@ -70,25 +75,84 @@ void get_color_iterations(int num_iterations, float* color)
     color[2] /= 255;
 }
 
-void display()
+const int NUM_THREADS = 16;
+
+void* calculate_set_thread(void* v)
 {
-    glClear(GL_COLOR_BUFFER_BIT);         // Clear the color buffer (background) // Your OpenGL display code here
-    glBegin(GL_POINTS);
     float pixel_step_x = (maxC.real - minC.real) / winX;
     float pixel_step_y = (maxC.imag - minC.imag) / winY;
 
-    for (int y = 0; y < winY; ++y) {
-        for (int x = 0; x < winX; ++x) {
+    long thread_num = (long) v;
+
+    //cout << "starting thread: " << thread_num << endl;
+    const int cols_per_thread = winX / NUM_THREADS;
+    int start = thread_num * cols_per_thread;
+    // if we aren't perfectly divisible by 16, then let the last one do 
+    // a few more columns
+    int stop = thread_num == NUM_THREADS - 1 ? winX : start + cols_per_thread;
+
+    for (int x = start; x < stop; ++x) {
+        for (int y = 0; y < winY; ++y) {
             float real_val = x * pixel_step_x + minC.real;
             float imag_val = y * pixel_step_y + minC.imag;
 
             Complex c(real_val, imag_val);
             int iters = get_num_iterations(c);
 
-            get_color_iterations(iters, color_vec);
-            // set color of the point
-            glColor3fv(color_vec);
-            glVertex3f(real_val, imag_val, 0.0f);
+            // fills the entry in set[x][y]
+            get_color_iterations(iters, set[x][y]);
+        }
+    }
+
+
+    pthread_mutex_lock(&activeMutex);
+    activeThreads--;
+    if (activeThreads == 0) {
+        pthread_cond_signal(&allDoneCondition);
+    }
+    pthread_mutex_unlock(&activeMutex);
+    return 0;
+}
+
+void calculate_set()
+{
+    pthread_t threads[NUM_THREADS];
+
+    if (pthread_barrier_init(&barrier, NULL, NUM_THREADS)) {
+        //cout << "Barrier couldn't be initialized" << endl;
+    }
+
+    pthread_mutex_init(&activeMutex, 0);
+    pthread_mutex_init(&coutMutex, 0);
+    pthread_cond_init(&allDoneCondition, 0);
+
+    pthread_mutex_lock(&activeMutex);
+    activeThreads = NUM_THREADS;
+    // Create 16 threads
+    for (long i = 0; i < NUM_THREADS; ++i) {
+        pthread_create(&threads[i], 0, calculate_set_thread,  (void*) i);
+        //cout << "threads: " << i << endl;
+    }
+
+    pthread_cond_wait(&allDoneCondition, &activeMutex);
+    pthread_mutex_unlock(&activeMutex);
+}
+
+void display()
+{
+    glClear(GL_COLOR_BUFFER_BIT);         // Clear the color buffer (background) // Your OpenGL display code here
+    cout << "display called" << endl;
+    calculate_set();
+    cout << "done calculating set" << endl;
+
+    float pixel_step_x = (maxC.real - minC.real) / winX;
+    float pixel_step_y = (maxC.imag - minC.imag) / winY;
+
+    glBegin(GL_POINTS);
+    for (int y = 0; y < winY; ++y) {
+        for (int x = 0; x < winX; ++x) {
+            glColor3fv(&set[x][y][0]);
+            glVertex3f(x * pixel_step_x + minC.real, y * pixel_step_y + minC.imag, 0.0f);
         }
     }
     glEnd();
@@ -99,9 +163,17 @@ void display()
 void reshape(int w, int h)
 { // Your OpenGL window reshape code here
 
-    glClear(GL_COLOR_BUFFER_BIT); // Clear the color buffer (background) // Your OpenGL display code here
+    //glClear(GL_COLOR_BUFFER_BIT); // Clear the color buffer (background) // Your OpenGL display code here
 
     winX = w; winY = h;
+
+    set.clear();
+    for (int x = 0; x < winX; ++x) {
+        set.push_back(vector< vector<float> >());
+        for (int y = 0; y < winY; ++y) {
+            set[x].push_back(vector<float>(3));
+        }
+    }
 
     glViewport(0, 0, w, h);
     glutPostRedisplay();
@@ -111,7 +183,7 @@ int main(int argc, char** argv)
 {
     // Initialize OpenGL, but only on the "master" thread or process.
     glutInit(&argc, argv); // Initialize GLUT
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // Set background color to black and opaque
 
     // Window initialization
@@ -127,6 +199,8 @@ int main(int argc, char** argv)
     glutReshapeFunc(reshape); // Window resize callback
     glutDisplayFunc(display); // Register display callback handler for window re-paint
 
+    // The recalculation occurs when the display function is run, so for this
+    // thread, we can simply enter the main loop.
     glutMainLoop();  // Enter the event-processing loop
 
     return 0;
